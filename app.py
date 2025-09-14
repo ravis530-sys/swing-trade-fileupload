@@ -398,7 +398,7 @@ def plot_symbol(symbol, exchange="NSE", last_n=180):
 
 # --- Main ---
 def main():
-    st.title("📊 Swing Trade AI Agent")
+    st.title("📊 Swing Trade Stock Agent")
 
     uploaded_file = st.file_uploader("Upload Stock List (CSV/Excel)", type=["csv", "xlsx"])
     if uploaded_file:
@@ -495,3 +495,4 @@ def main():
                 
 if __name__ == "__main__":
     main()
+
