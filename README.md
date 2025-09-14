@@ -1,5 +1,5 @@
-# Save README.md
-readme_text = """# 📊 Swing Trade Stock Agent
+# README.md
+### 📊 Swing Trade Stock Agent
 
 An interactive **Streamlit dashboard** that analyzes Indian stocks (NSE/BSE) using **technical indicators** and provides **Buy/Sell/Hold recommendations**.  
 It includes **charting, backtesting, equity curve analysis, risk of ruin, and runtime activity logs** with auto-scrolling.
