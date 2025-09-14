@@ -32,9 +32,6 @@ def write_log(message: str):
     if len(st.session_state["logs"]) > 500:
         st.session_state["logs"] = st.session_state["logs"][-500:]
 
-
-
-
 # --- Data Loaders ---
 @st.cache_data
 def load_logs():
@@ -396,6 +393,26 @@ def plot_symbol(symbol, exchange="NSE", last_n=180):
         st.subheader("📋 Trade Recommendation")
         st.table(pd.DataFrame([rec]))
 
+def normalize_symbol_column(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize common column names to 'Symbol' but avoid false matches like 'Stock Name'."""
+    # Accepted aliases for stock symbol column
+    valid_aliases = {
+        "symbol", "ticker", "stock code", "stockcode",
+        "security code", "security", "scrip"
+    }
+    
+    mapping = {}
+    for col in df.columns:
+        col_lower = col.lower().strip()
+        if col_lower in valid_aliases:
+            mapping[col] = "Symbol"
+            break
+
+    if mapping:
+        df = df.rename(columns=mapping)
+    return df
+
+
 # --- Main ---
 def main():
     st.title("📊 Swing Trade Stock Agent")
@@ -406,6 +423,14 @@ def main():
             df_uploaded = pd.read_csv(uploaded_file)
         else:
             df_uploaded = pd.read_excel(uploaded_file)
+
+        # Try to auto-detect a symbol column
+        df_uploaded = normalize_symbol_column(df_uploaded)
+
+        if "Symbol" not in df_uploaded.columns:
+            st.error("❌ The uploaded file must contain a stock symbol column (e.g., 'Symbol', 'Ticker', 'Stock Code').")
+            return
+
 
         st.success(f"✅ Loaded {len(df_uploaded)} rows")
 
@@ -421,11 +446,14 @@ def main():
         st.dataframe(df_uploaded.iloc[start_row:end_row])
 
         # Column choice
-        column_choice = st.selectbox("Select the column containing stock symbols", df_uploaded.columns)
-        symbols = df_uploaded[column_choice].dropna().unique().tolist()
-
-        
-
+        #column_choice = st.selectbox("Select the column containing stock symbols", df_uploaded.columns)
+        if "Symbol" not in df_uploaded.columns:
+            st.warning("⚠️ No standard symbol column detected. Please choose manually.")
+            column_choice = st.selectbox("Select the column containing stock symbols", df_uploaded.columns)
+            symbols = df_uploaded[column_choice].dropna().unique().tolist()
+        else:
+            column_choice = "Symbol"
+            symbols = df_uploaded[column_choice].dropna().unique().tolist()
 
         # Analysis Mode
         analysis_options = [""] + ["Auto (Signals)", "BUY", "SELL", "HOLD"]
@@ -490,8 +518,6 @@ def main():
         """,
         unsafe_allow_html=True
     )
-
-
                 
 if __name__ == "__main__":
     main()
