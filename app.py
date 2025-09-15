@@ -417,79 +417,162 @@ def normalize_symbol_column(df: pd.DataFrame) -> pd.DataFrame:
 def main():
     st.title("📊 Swing Trade Stock Agent")
 
-    uploaded_file = st.file_uploader("Upload Stock List (CSV/Excel)", type=["csv", "xlsx"])
-    if uploaded_file:
-        if uploaded_file.name.endswith(".csv"):
-            df_uploaded = pd.read_csv(uploaded_file)
+    st.markdown(
+        """
+        <style>
+        .mode-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 60px;
+            margin-top: 40px;
+        }
+        .img-btn {
+            border: none;
+            background: none;
+            cursor: pointer;
+        }
+        .img-btn img {
+            height: 120px;
+            transition: transform 0.2s;
+        }
+        .img-btn img:hover {
+            transform: scale(1.2);
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+
+    # --- Mode Handling ---
+    if "mode" not in st.session_state:
+        st.session_state["mode"] = None
+
+    mode = st.session_state["mode"]
+
+    # --- Sidebar Status ---
+    with st.sidebar:
+        if mode == "file":
+            st.success("📂 Current Mode: File Upload")
+        elif mode == "manual":
+            st.success("🔍 Current Mode: Manual Input")
         else:
-            df_uploaded = pd.read_excel(uploaded_file)
+            st.info("ℹ️ No mode selected yet")
 
-        # Try to auto-detect a symbol column
-        df_uploaded = normalize_symbol_column(df_uploaded)
+    # --- Mode Selection Buttons ---
+    col1, col2 = st.columns(2)
 
-        if "Symbol" not in df_uploaded.columns:
-            st.error("❌ The uploaded file must contain a stock symbol column (e.g., 'Symbol', 'Ticker', 'Stock Code').")
-            return
+    with col1:
+        if st.button("file_mode", key="file_btn", help="Upload File"):
+            st.session_state["mode"] = "file"
+        st.markdown(
+            '<button class="img-btn"><img src="https://img.icons8.com/fluency/96/opened-folder.png"/></button>',
+            unsafe_allow_html=True,
+        )
 
+    with col2:
+        if st.button("manual_mode", key="manual_btn", help="Manual Input"):
+            st.session_state["mode"] = "manual"
+        st.markdown(
+            '<button class="img-btn"><img src="https://img.icons8.com/fluency/96/search.png"/></button>',
+            unsafe_allow_html=True,
+        )
 
-        st.success(f"✅ Loaded {len(df_uploaded)} rows")
+    mode = st.session_state.get("mode", None)
 
-        # Pagination settings
-        rows_per_page = st.sidebar.number_input("Rows per page", min_value=5, max_value=100, value=10, step=5)
-        total_rows = len(df_uploaded)
-        total_pages = (total_rows // rows_per_page) + int(total_rows % rows_per_page > 0)
-        page = st.sidebar.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1)
-
-        start_row = (page - 1) * rows_per_page
-        end_row = start_row + rows_per_page
-        st.write(f"📄 Showing rows {start_row+1} to {min(end_row, total_rows)} of {total_rows}")
-        st.dataframe(df_uploaded.iloc[start_row:end_row])
-
-        # Column choice
-        #column_choice = st.selectbox("Select the column containing stock symbols", df_uploaded.columns)
-        if "Symbol" not in df_uploaded.columns:
-            st.warning("⚠️ No standard symbol column detected. Please choose manually.")
-            column_choice = st.selectbox("Select the column containing stock symbols", df_uploaded.columns)
-            symbols = df_uploaded[column_choice].dropna().unique().tolist()
-        else:
-            column_choice = "Symbol"
-            symbols = df_uploaded[column_choice].dropna().unique().tolist()
-
-        # Analysis Mode
-        analysis_options = [""] + ["Auto (Signals)", "BUY", "SELL", "HOLD"]
-        analysis_mode = st.sidebar.selectbox("Select Analysis Mode", analysis_options, index=0)
-
-        if analysis_mode == "":
-            st.sidebar.warning("⚠️ Please select an analysis mode to run scans.")
-            return
-
-        # Scan all symbols
-        recommendations = []
-        for symbol in symbols:
-            rec = analyze_symbol(symbol, exchange="NSE")
-            if rec:
-                recommendations.append(rec)
-
-        if recommendations:
-            rec_df = pd.DataFrame(recommendations)
-            # Apply analysis mode filter
-            if analysis_mode == "BUY":
-                rec_df = rec_df[rec_df["Recommendation"] == "BUY"]
-            elif analysis_mode == "SELL":
-                rec_df = rec_df[rec_df["Recommendation"] == "SELL"]
-            elif analysis_mode == "HOLD":
-                rec_df = rec_df[rec_df["Recommendation"] == "HOLD"]
-
-            st.subheader("📋 Recommendations Table")
-            st.dataframe(rec_df)
-
-            if not rec_df.empty:
-                options = [""] + rec_df["Symbol"].tolist()
-                selected_symbol = st.selectbox("Select a Signal Stock", options, index=0)
-                if selected_symbol != "":
-                    plot_symbol(selected_symbol, exchange="NSE", last_n=180)
+    if mode == "file":
+        uploaded_file = st.file_uploader("Upload Stock List (CSV/Excel)", type=["csv", "xlsx"])
+        if uploaded_file:
+            if uploaded_file.name.endswith(".csv"):
+                df_uploaded = pd.read_csv(uploaded_file)
             else:
-                st.info("No actionable stocks found for this mode.")
+                df_uploaded = pd.read_excel(uploaded_file)
+
+            # Try to auto-detect a symbol column
+            df_uploaded = normalize_symbol_column(df_uploaded)
+
+            if "Symbol" not in df_uploaded.columns:
+                st.error("❌ The uploaded file must contain a stock symbol column (e.g., 'Symbol', 'Ticker', 'Stock Code').")
+                return
+
+
+            st.success(f"✅ Loaded {len(df_uploaded)} rows")
+
+            # Pagination settings
+            rows_per_page = st.sidebar.number_input("Rows per page", min_value=5, max_value=100, value=10, step=5)
+            total_rows = len(df_uploaded)
+            total_pages = (total_rows // rows_per_page) + int(total_rows % rows_per_page > 0)
+            page = st.sidebar.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1)
+
+            start_row = (page - 1) * rows_per_page
+            end_row = start_row + rows_per_page
+            st.write(f"📄 Showing rows {start_row+1} to {min(end_row, total_rows)} of {total_rows}")
+            st.dataframe(df_uploaded.iloc[start_row:end_row])
+
+            # Column choice
+            #column_choice = st.selectbox("Select the column containing stock symbols", df_uploaded.columns)
+            if "Symbol" not in df_uploaded.columns:
+                st.warning("⚠️ No standard symbol column detected. Please choose manually.")
+                column_choice = st.selectbox("Select the column containing stock symbols", df_uploaded.columns)
+                symbols = df_uploaded[column_choice].dropna().unique().tolist()
+            else:
+                column_choice = "Symbol"
+                symbols = df_uploaded[column_choice].dropna().unique().tolist()
+
+            # Analysis Mode
+            analysis_options = [""] + ["Auto (Signals)", "BUY", "SELL", "HOLD"]
+            analysis_mode = st.sidebar.selectbox("Select Analysis Mode", analysis_options, index=0)
+
+            if analysis_mode == "":
+                st.sidebar.warning("⚠️ Please select an analysis mode to run scans.")
+                return
+
+            # Scan all symbols
+            recommendations = []
+            for symbol in symbols:
+                rec = analyze_symbol(symbol, exchange="NSE")
+                if rec:
+                    recommendations.append(rec)
+
+            if recommendations:
+                rec_df = pd.DataFrame(recommendations)
+                # Apply analysis mode filter
+                if analysis_mode == "BUY":
+                    rec_df = rec_df[rec_df["Recommendation"] == "BUY"]
+                elif analysis_mode == "SELL":
+                    rec_df = rec_df[rec_df["Recommendation"] == "SELL"]
+                elif analysis_mode == "HOLD":
+                    rec_df = rec_df[rec_df["Recommendation"] == "HOLD"]
+
+                st.subheader("📋 Recommendations Table")
+                st.dataframe(rec_df)
+
+                if not rec_df.empty:
+                    options = [""] + rec_df["Symbol"].tolist()
+                    selected_symbol = st.selectbox("Select a Signal Stock", options, index=0)
+                    if selected_symbol != "":
+                        plot_symbol(selected_symbol, exchange="NSE", last_n=180)
+                else:
+                    st.info("No actionable stocks found for this mode.")
+
+    elif mode == "manual":
+        # === Manual Search Mode (No File Uploaded) ===
+        st.subheader("🔍 Manual Symbol Search")
+        manual_symbol = st.text_input("Enter a stock symbol (e.g., RELIANCE, TCS, INFY):", "")
+
+        if manual_symbol:
+            write_log(f"Manual analysis started for {manual_symbol}")
+            rec = analyze_symbol(manual_symbol.strip().upper(), exchange="NSE")
+            if rec:
+                st.subheader("📋 Manual Symbol Recommendation")
+                st.table(pd.DataFrame([rec]))
+                plot_symbol(manual_symbol.strip().upper(), exchange="NSE", last_n=180)
+            else:
+                st.warning(f"No data found for {manual_symbol}")
+    else:
+        st.info("👆 Please choose a mode above to continue")
 
     global log_container
     st.subheader("Runtime Logs")
@@ -518,7 +601,7 @@ def main():
         """,
         unsafe_allow_html=True
     )
-                
+    
 if __name__ == "__main__":
     main()
 
