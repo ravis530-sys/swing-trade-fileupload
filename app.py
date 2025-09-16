@@ -415,31 +415,161 @@ def normalize_symbol_column(df: pd.DataFrame) -> pd.DataFrame:
 
 # --- Main ---
 def main():
-    st.title("📊 Swing Trade Stock Agent")
-
+    # Custom CSS for dark theme and panel styling
     st.markdown(
         """
         <style>
+        /* General Dark Theme */
+        .stApp {
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+        }
+        h1, h2, h3, h4, h5, h6 {
+            color: #e0e0e0;
+        }
+        p, label, .stMarkdown {
+            color: white;
+        }
+        .stTextInput > div > div > input,
+        .stSelectbox > div > div > div,
+        .stFileUploader > div > div {
+            background-color: #2d2d2d;
+            color: #e0e0e0;
+            border: 1px solid #444;
+        }
+        .stButton > button {
+            background-color: #007bff;
+            color: white;
+            border-radius: 5px;
+            padding: 8px 15px;
+        }
+        .stButton > button:hover {
+            background-color: #0056b3;
+        }
+        /* Sidebar styling */
+        [data-testid="stSidebar"] {
+            background-color: #2d2d2d;
+            color: #e0e0e0;
+        }
+        /*
+        [data-testid="stMainBlockContainer"] {
+            max-width: 57%;
+        }*/
+        /* Header and Connection Status */
+        .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #333;
+            margin-bottom: 30px;
+            text-wrap-mode: nowrap;
+        }
+        .platform-title {
+            font-size: 2em !important;
+            font-weight: bold;
+            color: #e0e0e0;
+            margin: 0;
+        }
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .connection-status span {
+            font-size: 1em;
+            color: #bbb;
+        }
+        .connection-status .nse, .connection-status .bse {
+            font-weight: bold;
+        }
+        .connection-status .nse {
+            color: #4CAF50; /* Green for NSE */
+        }
+        .connection-status .bse {
+            color: #FFC107; /* Amber for BSE */
+        }
+        .dashboard-button button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+        }
+        .dashboard-button button:hover {
+            background-color: #0056b3;
+        }
+        [data-testid="stButton"]  {
+            width: 295px;
+        }
+        /* Mode Selection Panels */
         .mode-container {
             display: flex;
             justify-content: center;
-            align-items: center;
-            gap: 60px;
+            gap: 30px;
             margin-top: 40px;
+            margin-bottom: 40px;
         }
-        .img-btn {
-            border: none;
-            background: none;
+        .mode-panel {
+            background-color: #2d2d2d;
+            border-radius: 10px;
+            padding: 30px;
+            text-align: center;
             cursor: pointer;
+            transition: all 0.3s ease-in-out;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            width: 300px; /* Fixed width for uniformity */
+            height: 250px; /* Fixed height for uniformity */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
         }
-        .img-btn img {
-            height: 120px;
-            transition: transform 0.2s;
+        .mode-panel:hover {
+            background-color: #3a3a3a;
+            transform: translateY(-5px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
         }
-        .img-btn img:hover {
-            transform: scale(1.2);
+        .mode-panel img {
+            height: 60px; /* Smaller icons */
+            margin-bottom: 15px;
+            filter: invert(1); /* Make icons white/light in dark mode */
+        }
+        .mode-panel h3 {
+            color: #e0e0e0;
+            font-size: 1.5em; /* Larger title */
+            margin-bottom: 10px;
+        }
+        .mode-panel p {
+            color: #bbb;
+            font-size: 0.9em;
+        }
+        .mode-panel .sub-text {
+            font-size: 0.8em;
+            color: #888;
+            margin-top: 10px;
         }
         </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # --- Header Section ---
+    st.markdown(
+        """
+        <div class="header-container">
+            <h1 class="platform-title">Swing Trade Stock Platform</h1>
+            <div class="connection-status">
+                <span class="nse">🟢 NSE</span>
+                <span class="bse">🟠 BSE</span>
+                <div class="dashboard-button">
+                    <button>Dashboard</button>
+                </div>
+            </div>
+        </div>
         """,
         unsafe_allow_html=True
     )
@@ -461,26 +591,62 @@ def main():
         else:
             st.info("ℹ️ No mode selected yet")
 
-    # --- Mode Selection Buttons ---
+    # --- Mode Selection Panels ---
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button("file_mode", key="file_btn", help="Upload File"):
-            st.session_state["mode"] = "file"
+        # File Upload Panel (Visual)
         st.markdown(
-            '<button class="img-btn"><img src="https://img.icons8.com/fluency/96/opened-folder.png"/></button>',
-            unsafe_allow_html=True,
+            """
+            <div class="mode-panel" id="file_upload_panel">
+                <img src="https://img.icons8.com/ios/100/FFFFFF/upload--v1.png" alt="Upload File">
+                <h3>Upload Stock List</h3>
+                <p>Upload Excel/CSV file with your stock list for comprehensive analysis</p>
+                <p class="sub-text">Excel/CSV | Batch Analysis</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        # Hidden Streamlit button for functionality
+        st.button("Upload File Trigger", key="file_mode_trigger", on_click=lambda: st.session_state.update(mode="file"))
+        st.markdown("<style>#file_mode_trigger {display: none; width: 87%;}</style>", unsafe_allow_html=True) # Hide the actual button and set width
+        st.markdown(
+            """
+            <script>
+            document.getElementById('file_upload_panel').onclick = function() {
+                document.getElementById('file_mode_trigger').click();
+            };
+            </script>
+            """,
+            unsafe_allow_html=True
         )
 
     with col2:
-        if st.button("manual_mode", key="manual_btn", help="Manual Input"):
-            st.session_state["mode"] = "manual"
+        # Manual Input Panel (Visual)
         st.markdown(
-            '<button class="img-btn"><img src="https://img.icons8.com/fluency/96/search.png"/></button>',
-            unsafe_allow_html=True,
+            """
+            <div class="mode-panel" id="manual_input_panel">
+                <img src="https://img.icons8.com/ios/100/FFFFFF/edit--v1.png" alt="Manual Input">
+                <h3>Manual Stock Entry</h3>
+                <p>Enter specific stock symbol for detailed technical and fundamental analysis</p>
+                <p class="sub-text">Single Stock | Deep Analysis</p>
+            </div>
+            """,
+            unsafe_allow_html=True
         )
-
-    mode = st.session_state.get("mode", None)
+        # Hidden Streamlit button for functionality
+        st.button("Manual Input Trigger", key="manual_mode_trigger", on_click=lambda: st.session_state.update(mode="manual"))
+        st.markdown("<style>#manual_mode_trigger {display: none;}</style>", unsafe_allow_html=True) # Hide the actual button
+        st.markdown(
+            """
+            <script>
+            document.getElementById('manual_input_panel').onclick = function() {
+                document.getElementById('manual_mode_trigger').click();
+            };
+            </script>
+            """,
+            unsafe_allow_html=True
+        )
 
     if mode == "file":
         uploaded_file = st.file_uploader("Upload Stock List (CSV/Excel)", type=["csv", "xlsx"])
