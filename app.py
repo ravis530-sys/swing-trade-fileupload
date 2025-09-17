@@ -679,6 +679,48 @@ def main():
             color: #888;
             margin-top: 10px;
         }
+        /* Responsive adjustments */
+        @media screen and (max-width: 768px) {
+            .header-container {
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+            }
+            .platform-title {
+                font-size: 1.8em !important;
+                margin-bottom: 10px;
+            }
+            .connection-status {
+                flex-direction: column;
+                gap: 5px;
+            }
+            .dashboard-button button {
+                width: 100%;
+                margin-top: 10px;
+            }
+            .mode-container {
+                flex-direction: column;
+                align-items: center;
+                gap: 20px;
+            }
+            .mode-panel {
+                width: 90%; /* Make panels take more width on small screens */
+                height: auto; /* Allow height to adjust */
+                padding: 20px;
+            }
+            .mode-panel h3 {
+                font-size: 1.3em;
+            }
+            .mode-panel p {
+                font-size: 0.85em;
+            }
+            .stFileUploader > div > div {
+                width: 100% !important; /* Ensure file uploader is responsive */
+            }
+            [data-testid="stButton"] {
+                width: 295px; /* Make sidebar buttons responsive */
+            }
+        }
         </style>
         """,
         unsafe_allow_html=True
