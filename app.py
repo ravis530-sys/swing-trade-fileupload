@@ -159,49 +159,92 @@ def analyze_symbol(symbol, exchange="NSE"):
         df[close_col] = df[close_col].iloc[:, 0]
     df[close_col] = pd.to_numeric(df[close_col], errors="coerce")
 
-    # Indicators
-    df['EMA20'] = df[close_col].ewm(span=20).mean()
-    df['EMA50'] = df[close_col].ewm(span=50).mean()
-    df['EMA200'] = df[close_col].ewm(span=200).mean()
+    # Initialize indicators based on session state, defaulting to True if not set
+    use_ema20 = st.session_state.get("use_ema20", True)
+    use_ema50 = st.session_state.get("use_ema50", True)
+    use_ema200 = st.session_state.get("use_ema200", True)
+    use_rsi = st.session_state.get("use_rsi", True)
+    use_macd = st.session_state.get("use_macd", True)
+    use_volfilter = st.session_state.get("use_volfilter", True)
+    breakout_period = st.session_state.get("breakout_period", "None")
 
-    df = compute_indicators(df, symbol=symbol, close_col=close_col)
+    # Indicators
+    if use_ema20:
+        df['EMA20'] = df[close_col].ewm(span=20).mean()
+    if use_ema50:
+        df['EMA50'] = df[close_col].ewm(span=50).mean()
+    if use_ema200:
+        df['EMA200'] = df[close_col].ewm(span=200).mean()
+
+    if use_rsi or use_macd or use_volfilter:
+        df = compute_indicators(df, symbol=symbol, close_col=close_col)
+
+    # Breakout Analysis
+    df["Breakout"] = False
+    if breakout_period == "52-Day Breakout":
+        df['High_52_Week'] = df[close_col].rolling(window=52*5, min_periods=1).max() # 52 weeks * 5 trading days
+        df["Breakout"] = (df[close_col].iloc[-1] >= df['High_52_Week'].iloc[-1])
+    elif breakout_period == "120-Day Breakout":
+        df['High_120_Day'] = df[close_col].rolling(window=120, min_periods=1).max()
+        df["Breakout"] = (df[close_col].iloc[-1] >= df['High_120_Day'].iloc[-1])
 
     # Signals with volume filter
-    df["Buy"] = (((df["EMA20"] > df["EMA200"]) | (df["EMA50"] > df["EMA200"])) &
-                 (df["RSI"] < 30) &
-                 (df["MACD"] > df["Signal"]) &
-                 (df["VolFilter"]))
+    buy_conditions = []
+    sell_conditions = []
 
-    df["Sell"] = (((df["EMA20"] < df["EMA200"]) | (df["EMA50"] < df["EMA200"])) &
-                  (df["RSI"] > 70) &
-                  (df["MACD"] < df["Signal"]) &
-                 (df["VolFilter"]))
+    if use_ema20 and use_ema200:
+        buy_conditions.append(df["EMA20"] > df["EMA200"])
+        sell_conditions.append(df["EMA20"] < df["EMA200"])
+    if use_ema50 and use_ema200:
+        buy_conditions.append(df["EMA50"] > df["EMA200"])
+        sell_conditions.append(df["EMA50"] < df["EMA200"])
+    if use_rsi:
+        buy_conditions.append(df["RSI"] < 30)
+        sell_conditions.append(df["RSI"] > 70)
+    if use_macd:
+        buy_conditions.append(df["MACD"] > df["Signal"])
+        sell_conditions.append(df["MACD"] < df["Signal"])
+    if use_volfilter:
+        buy_conditions.append(df["VolFilter"])
+        sell_conditions.append(df["VolFilter"])
+    
+    if df["Breakout"].iloc[-1] and breakout_period != "None":
+        buy_conditions.append(df["Breakout"])
+
+    # Combine conditions
+    if buy_conditions:
+        df["Buy"] = pd.concat(buy_conditions, axis=1).all(axis=1)
+    else:
+        df["Buy"] = False # No buy signals if no indicators are selected
+
+    if sell_conditions:
+        df["Sell"] = pd.concat(sell_conditions, axis=1).all(axis=1)
+    else:
+        df["Sell"] = False # No sell signals if no indicators are selected
 
     latest_price = df[close_col].iloc[-1]
     recent_window = df.tail(20)
     support = round(recent_window[close_col].min(), 2)
     resistance = round(recent_window[close_col].max(), 2)
 
-    #logs
-        # --- Activity Logs ---
-    write_log(f"{symbol}: "
-              f"EMA20={df['EMA20'].iloc[-1]:.2f}, "
-              f"EMA200={df['EMA200'].iloc[-1]:.2f}, "
-              f"EMA50={df['EMA50'].iloc[-1]:.2f}, "
-              f"RSI={df['RSI'].iloc[-1]:.2f}, "
-              f"MACD={df['MACD'].iloc[-1]:.2f}, "
-              f"Signal={df['Signal'].iloc[-1]:.2f}, "
-              f"VolFilter={df['VolFilter'].iloc[-1]}, "
-              f"Buy={df['Buy'].iloc[-1]}, "
-              f"Sell={df['Sell'].iloc[-1]}")
+    # logs
+    log_message_parts = [f"{symbol}: "]
+    if use_ema20: log_message_parts.append(f"EMA20={df['EMA20'].iloc[-1]:.2f}")
+    if use_ema50: log_message_parts.append(f"EMA50={df['EMA50'].iloc[-1]:.2f}")
+    if use_ema200: log_message_parts.append(f"EMA200={df['EMA200'].iloc[-1]:.2f}")
+    if use_rsi: log_message_parts.append(f"RSI={df['RSI'].iloc[-1]:.2f}")
+    if use_macd: log_message_parts.append(f"MACD={df['MACD'].iloc[-1]:.2f}, Signal={df['Signal'].iloc[-1]:.2f}")
+    if use_volfilter: log_message_parts.append(f"VolFilter={df['VolFilter'].iloc[-1]}")
+    if breakout_period != "None": log_message_parts.append(f"{breakout_period}={df['Breakout'].iloc[-1]}")
+    log_message_parts.append(f"Buy={df['Buy'].iloc[-1]}, Sell={df['Sell'].iloc[-1]}")
+    write_log(", ".join(log_message_parts))
 
-     # Auto recommendation
+    # Auto recommendation
+    rec, target, sl = "HOLD", None, None
     if df["Buy"].iloc[-1]:
         rec, target, sl = "BUY", round(latest_price * 1.05, 2), support
     elif df["Sell"].iloc[-1]:
         rec, target, sl = "SELL", round(latest_price * 0.95, 2), resistance
-    else:
-        rec, target, sl = "HOLD", None, None
 
     # Apply analysis mode
     #if analysis_mode == "Auto (Signals)":
@@ -242,52 +285,110 @@ def plot_symbol(symbol, exchange="NSE", last_n=180):
         df[close_col] = df[close_col].iloc[:, 0]
     df[close_col] = pd.to_numeric(df[close_col], errors="coerce")
 
-    # Indicators
-    df['EMA20'] = df[close_col].ewm(span=20).mean()
-    df['EMA50'] = df[close_col].ewm(span=50).mean()
-    df['EMA200'] = df[close_col].ewm(span=200).mean()
+    # Initialize indicators based on session state, defaulting to True if not set
+    use_ema20 = st.session_state.get("use_ema20", True)
+    use_ema50 = st.session_state.get("use_ema50", True)
+    use_ema200 = st.session_state.get("use_ema200", True)
+    use_rsi = st.session_state.get("use_rsi", True)
+    use_macd = st.session_state.get("use_macd", True)
+    use_volfilter = st.session_state.get("use_volfilter", True)
+    breakout_period = st.session_state.get("breakout_period", "None")
 
-    df = compute_indicators(df, symbol=symbol, close_col=close_col)
+    # Indicators
+    if use_ema20:
+        df['EMA20'] = df[close_col].ewm(span=20).mean()
+    if use_ema50:
+        df['EMA50'] = df[close_col].ewm(span=50).mean()
+    if use_ema200:
+        df['EMA200'] = df[close_col].ewm(span=200).mean()
+
+    if use_rsi or use_macd or use_volfilter:
+        df = compute_indicators(df, symbol=symbol, close_col=close_col)
+
+    # Breakout Analysis
+    df["Breakout"] = False
+    if breakout_period == "52-Day Breakout":
+        df['High_52_Week'] = df[close_col].rolling(window=52*5, min_periods=1).max() # 52 weeks * 5 trading days
+        df["Breakout"] = (df[close_col].iloc[-1] >= df['High_52_Week'].iloc[-1])
+    elif breakout_period == "120-Day Breakout":
+        df['High_120_Day'] = df[close_col].rolling(window=120, min_periods=1).max()
+        df["Breakout"] = (df[close_col].iloc[-1] >= df['High_120_Day'].iloc[-1])
 
     # Signals
-    df["Buy"] = (((df["EMA20"] > df["EMA200"]) | (df["EMA50"] > df["EMA200"])) &
-                 (df["RSI"] < 30) &
-                 (df["MACD"] > df["Signal"]) &
-                 (df["VolFilter"]))
+    buy_conditions = []
+    sell_conditions = []
 
-    df["Sell"] = (((df["EMA20"] < df["EMA200"]) | (df["EMA50"] < df["EMA200"])) &
-                  (df["RSI"] > 70) &
-                  (df["MACD"] < df["Signal"]) &
-                 (df["VolFilter"]))
+    if use_ema20 and use_ema200:
+        buy_conditions.append(df["EMA20"] > df["EMA200"])
+        sell_conditions.append(df["EMA20"] < df["EMA200"])
+    if use_ema50 and use_ema200:
+        buy_conditions.append(df["EMA50"] > df["EMA200"])
+        sell_conditions.append(df["EMA50"] < df["EMA200"])
+    if use_rsi:
+        buy_conditions.append(df["RSI"] < 30)
+        sell_conditions.append(df["RSI"] > 70)
+    if use_macd:
+        buy_conditions.append(df["MACD"] > df["Signal"])
+        sell_conditions.append(df["MACD"] < df["Signal"])
+    if use_volfilter:
+        buy_conditions.append(df["VolFilter"])
+        sell_conditions.append(df["VolFilter"])
+    
+    if df["Breakout"].iloc[-1] and breakout_period != "None":
+        buy_conditions.append(df["Breakout"])
+
+    # Combine conditions
+    if buy_conditions:
+        df["Buy"] = pd.concat(buy_conditions, axis=1).all(axis=1)
+    else:
+        df["Buy"] = False # No buy signals if no indicators are selected
+
+    if sell_conditions:
+        df["Sell"] = pd.concat(sell_conditions, axis=1).all(axis=1)
+    else:
+        df["Sell"] = False # No sell signals if no indicators are selected
 
     # --- Price + EMA + Signals ---
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.plot(df.index, df[close_col], label="Close", color="blue")
-    ax.plot(df.index, df['EMA20'], "--", label="EMA20")
-    ax.plot(df.index, df['EMA50'], "--", label="EMA50")
-    ax.plot(df.index, df['EMA200'], "--", label="EMA200")
-    ax.scatter(df.index[df["Buy"]], df[close_col][df["Buy"]], marker="^", color="green", s=100, label="Buy")
-    ax.scatter(df.index[df["Sell"]], df[close_col][df["Sell"]], marker="v", color="red", s=100, label="Sell")
+    if use_ema20:
+        ax.plot(df.index, df['EMA20'], "--", label="EMA20")
+    if use_ema50:
+        ax.plot(df.index, df['EMA50'], "--", label="EMA50")
+    if use_ema200:
+        ax.plot(df.index, df['EMA200'], "--", label="EMA200")
+    
+    if breakout_period == "52-Day Breakout" and 'High_52_Week' in df.columns:
+        ax.plot(df.index, df['High_52_Week'], ":", label="52-Week High", color="orange")
+    elif breakout_period == "120-Day Breakout" and 'High_120_Day' in df.columns:
+        ax.plot(df.index, df['High_120_Day'], ":", label="120-Day High", color="purple")
+
+    if "Buy" in df.columns:
+        ax.scatter(df.index[df["Buy"]], df[close_col][df["Buy"]], marker="^", color="green", s=100, label="Buy")
+    if "Sell" in df.columns:
+        ax.scatter(df.index[df["Sell"]], df[close_col][df["Sell"]], marker="v", color="red", s=100, label="Sell")
     ax.legend()
     ax.set_title(f"{symbol} Price & Signals")
     st.pyplot(fig)
 
     # --- RSI Chart ---
-    fig_rsi, ax_rsi = plt.subplots(figsize=(10, 2))
-    ax_rsi.plot(df.index, df["RSI"], color="purple")
-    ax_rsi.axhline(70, color="red", linestyle="--", alpha=0.5)
-    ax_rsi.axhline(30, color="green", linestyle="--", alpha=0.5)
-    ax_rsi.set_title("RSI (14)")
-    st.pyplot(fig_rsi)
+    if use_rsi:
+        fig_rsi, ax_rsi = plt.subplots(figsize=(10, 2))
+        ax_rsi.plot(df.index, df["RSI"], color="purple")
+        ax_rsi.axhline(70, color="red", linestyle="--", alpha=0.5)
+        ax_rsi.axhline(30, color="green", linestyle="--", alpha=0.5)
+        ax_rsi.set_title("RSI (14)")
+        st.pyplot(fig_rsi)
 
     # --- MACD Chart ---
-    fig_macd, ax_macd = plt.subplots(figsize=(10, 2))
-    ax_macd.plot(df.index, df["MACD"], label="MACD", color="blue")
-    ax_macd.plot(df.index, df["Signal"], label="Signal", color="orange")
-    ax_macd.axhline(0, color="black", linewidth=1)
-    ax_macd.legend()
-    ax_macd.set_title("MACD (12,26,9)")
-    st.pyplot(fig_macd)
+    if use_macd:
+        fig_macd, ax_macd = plt.subplots(figsize=(10, 2))
+        ax_macd.plot(df.index, df["MACD"], label="MACD", color="blue")
+        ax_macd.plot(df.index, df["Signal"], label="Signal", color="orange")
+        ax_macd.axhline(0, color="black", linewidth=1)
+        ax_macd.legend()
+        ax_macd.set_title("MACD (12,26,9)")
+        st.pyplot(fig_macd)
 
     # --- Backtest Trades ---
     capital = 100000
@@ -318,74 +419,100 @@ def plot_symbol(symbol, exchange="NSE", last_n=180):
 
 
     if trades:
-        df_trades = pd.DataFrame(trades)
-        st.subheader("📊 Trade History")
-        st.table(df_trades)
+        df_trades = pd.DataFrame(trades, columns=["Type", "Date", "Price"])
+        
+        # Calculate Profit% for each trade
+        # Assuming trades are in pairs (BUY, SELL)
+        processed_trades = []
+        buy_price = None
+        buy_date = None
+        for i, row in df_trades.iterrows():
+            if row["Type"] == "BUY":
+                buy_price = row["Price"]
+                buy_date = row["Date"]
+            elif row["Type"] == "SELL" and buy_price is not None:
+                sell_price = row["Price"]
+                profit_pct = ((sell_price - buy_price) / buy_price) * 100
+                processed_trades.append({
+                    "Buy Date": buy_date,
+                    "Buy Price": buy_price,
+                    "Sell Date": row["Date"],
+                    "Sell Price": sell_price,
+                    "Profit%": profit_pct
+                })
+                buy_price = None # Reset for next trade pair
 
-        # Stats
-        total_trades = len(df_trades)
-        wins = (df_trades["Profit%"] > 0).sum()
-        win_rate = wins / total_trades if total_trades else 0
-        avg_profit = df_trades["Profit%"].mean()
+        if processed_trades:
+            df_trades_summary = pd.DataFrame(processed_trades)
+            st.subheader("📊 Trade History")
+            st.dataframe(df_trades_summary)
 
-        stats = {
-            "Total Trades": total_trades,
-            "Win Rate": f"{win_rate:.2%}",
-            "Avg Profit %": round(avg_profit, 2),
-            "Max Profit %": df_trades["Profit%"].max(),
-            "Max Loss %": df_trades["Profit%"].min()
-        }
+            # Stats
+            total_trades = len(df_trades_summary)
+            wins = (df_trades_summary["Profit%"] > 0).sum()
+            win_rate = wins / total_trades if total_trades else 0
+            avg_profit = df_trades_summary["Profit%"].mean()
 
-        st.subheader("📈 Backtest Performance")
-        st.json(stats)
+            stats = {
+                "Total Trades": total_trades,
+                "Win Rate": f"{win_rate:.2%}",
+                "Avg Profit %": round(avg_profit, 2),
+                "Max Profit %": df_trades_summary["Profit%"].max(),
+                "Max Loss %": df_trades_summary["Profit%"].min()
+            }
 
-        # Equity Curve
-        start_capital = st.sidebar.number_input("Starting Capital (₹)", min_value=10000, value=1000000, step=50000)
-        risk_fraction = st.sidebar.slider("Fraction of capital per trade", 0.1, 1.0, 1.0)
-        risk_per_trade_pct = st.sidebar.slider("Risk % per trade (for ruin calc)", 0.5, 5.0, 2.0)
+            st.subheader("📈 Backtest Performance")
+            st.json(stats)
 
-        portfolio = [start_capital]
-        for _, trade in df_trades.iterrows():
-            last_capital = portfolio[-1]
-            trade_capital = last_capital * risk_fraction
-            profit = trade_capital * (trade["Profit%"] / 100.0)
-            portfolio.append(last_capital + profit)
+            # Equity Curve
+            start_capital = st.sidebar.number_input("Starting Capital (₹)", min_value=10000, value=1000000, step=50000)
+            risk_fraction = st.sidebar.slider("Fraction of capital per trade", 0.1, 1.0, 1.0)
+            risk_per_trade_pct = st.sidebar.slider("Risk % per trade (for ruin calc)", 0.5, 5.0, 2.0)
 
-        equity_curve = pd.Series(portfolio[1:], index=df_trades["ExitDate"])
+            portfolio = [start_capital]
+            for _, trade in df_trades_summary.iterrows():
+                last_capital = portfolio[-1]
+                trade_capital = last_capital * risk_fraction
+                profit = trade_capital * (trade["Profit%"] / 100.0)
+                portfolio.append(last_capital + profit)
 
-        fig2, ax = plt.subplots(figsize=(10, 4))
-        ax.plot(equity_curve.index, equity_curve.values, marker="o", color="blue")
-        ax.set_title("💰 Capital-Based Equity Curve")
-        ax.set_xlabel("Trade Exit Date")
-        ax.set_ylabel("Portfolio Value (₹)")
-        plt.xticks(rotation=45)
-        st.pyplot(fig2)
+            equity_curve = pd.Series(portfolio[1:], index=df_trades_summary["Sell Date"])
 
-        # Drawdown
-        running_max = equity_curve.cummax()
-        drawdowns = (equity_curve - running_max) / running_max * 100
+            fig2, ax = plt.subplots(figsize=(10, 4))
+            ax.plot(equity_curve.index, equity_curve.values, marker="o", color="blue")
+            ax.set_title("💰 Capital-Based Equity Curve")
+            ax.set_xlabel("Trade Exit Date")
+            ax.set_ylabel("Portfolio Value (₹)")
+            plt.xticks(rotation=45)
+            st.pyplot(fig2)
 
-        fig3, ax = plt.subplots(figsize=(10, 3))
-        ax.fill_between(drawdowns.index, drawdowns.values, 0, color="red", alpha=0.3)
-        ax.set_title("📉 Drawdown Curve")
-        ax.set_ylabel("Drawdown %")
-        plt.xticks(rotation=45)
-        st.pyplot(fig3)
+            # Drawdown
+            running_max = equity_curve.cummax()
+            drawdowns = (equity_curve - running_max) / running_max * 100
 
-        # Risk of Ruin
-        avg_win = df_trades[df_trades["Profit%"] > 0]["Profit%"].mean()
-        avg_loss = abs(df_trades[df_trades["Profit%"] <= 0]["Profit%"].mean())
-        win_rate = (df_trades["Profit%"] > 0).mean()
+            fig3, ax = plt.subplots(figsize=(10, 3))
+            ax.fill_between(drawdowns.index, drawdowns.values, 0, color="red", alpha=0.3)
+            ax.set_title("📉 Drawdown Curve")
+            ax.set_ylabel("Drawdown %")
+            plt.xticks(rotation=45)
+            st.pyplot(fig3)
 
-        if pd.notna(avg_win) and pd.notna(avg_loss) and avg_loss > 0:
-            reward_risk = avg_win / avg_loss
-            capital_units = int(start_capital / (start_capital * (risk_per_trade_pct / 100)))
-            risk_of_ruin = ((1 - (win_rate * reward_risk)) / (1 + (win_rate * reward_risk))) ** capital_units
-            st.subheader("⚠️ Risk of Ruin Estimate")
-            st.write(f"Win Rate: {win_rate:.2%}, Avg Win/Loss Ratio: {reward_risk:.2f}")
-            st.write(f"Estimated Risk of Ruin: {risk_of_ruin:.6f}")
+            # Risk of Ruin
+            avg_win = df_trades_summary[df_trades_summary["Profit%"] > 0]["Profit%"].mean()
+            avg_loss = abs(df_trades_summary[df_trades_summary["Profit%"] <= 0]["Profit%"].mean())
+            win_rate = (df_trades_summary["Profit%"] > 0).mean()
+
+            if pd.notna(avg_win) and pd.notna(avg_loss) and avg_loss > 0:
+                reward_risk = avg_win / avg_loss
+                capital_units = int(start_capital / (start_capital * (risk_per_trade_pct / 100)))
+                risk_of_ruin = ((1 - (win_rate * reward_risk)) / (1 + (win_rate * reward_risk))) ** capital_units
+                st.subheader("⚠️ Risk of Ruin Estimate")
+                st.write(f"Win Rate: {win_rate:.2%}, Avg Win/Loss Ratio: {reward_risk:.2f}")
+                st.write(f"Estimated Risk of Ruin: {risk_of_ruin:.6f}")
+            else:
+                st.info("Not enough trades to estimate Risk of Ruin.")
         else:
-            st.info("Not enough trades to estimate Risk of Ruin.")
+            st.info("No trades executed based on the selected indicators.")
 
     # Final Recommendation
     rec = analyze_symbol(symbol, exchange=exchange)
@@ -584,6 +711,25 @@ def main():
 
     # --- Sidebar Status ---
     with st.sidebar:
+        st.subheader("Technical Indicators")
+        st.session_state["use_ema20"] = st.checkbox("EMA20", value=True, key="ema20_checkbox")
+        st.session_state["use_ema50"] = st.checkbox("EMA50", value=True, key="ema50_checkbox")
+        st.session_state["use_ema200"] = st.checkbox("EMA200", value=True, key="ema200_checkbox")
+        st.session_state["use_rsi"] = st.checkbox("RSI", value=True, key="rsi_checkbox")
+        st.session_state["use_macd"] = st.checkbox("MACD", value=True, key="macd_checkbox")
+        st.session_state["use_volfilter"] = st.checkbox("Volume Filter", value=True, key="volfilter_checkbox")
+
+        #st.markdown("---") # Separator
+
+        st.subheader("Breakout Analysis")
+        st.session_state["breakout_period"] = st.radio(
+            "Select Breakout Period",
+            ("None", "52-Day Breakout", "120-Day Breakout"),
+            index=0,
+            key="breakout_radio"
+        )
+        #st.markdown("---") # Separator
+
         if mode == "file":
             st.success("📂 Current Mode: File Upload")
         elif mode == "manual":
@@ -751,6 +897,7 @@ def main():
     if st.button("🗑️ Clear Logs"):
         clear_logs()
         st.session_state["logs"] = []
+        log_container = st.empty()
         st.success("Logs cleared!")
 
     # Show current logs
