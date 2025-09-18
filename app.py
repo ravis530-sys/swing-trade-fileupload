@@ -939,8 +939,21 @@ def main():
     if st.button("🗑️ Clear Logs"):
         clear_logs()
         st.session_state["logs"] = []
+        # Reset relevant session state variables
+        st.session_state["mode"] = None
+        st.session_state["use_ema20"] = True
+        st.session_state["use_ema50"] = True
+        st.session_state["use_ema200"] = True
+        st.session_state["use_rsi"] = True
+        st.session_state["use_macd"] = True
+        st.session_state["use_volfilter"] = True
+        st.session_state["breakout_period"] = "None"
+        # Reset selected symbol to clear charts
+        if "selected_symbol" in st.session_state:
+            st.session_state["selected_symbol"] = ""
         log_container = st.empty()
-        st.success("Logs cleared!")
+        st.success("Logs cleared and state reset!")
+        st.rerun() # Rerun the app to reflect the cleared state and hide charts
 
     # Show current logs
     log_html = "<br>".join(st.session_state["logs"])
