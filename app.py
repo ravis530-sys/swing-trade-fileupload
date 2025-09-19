@@ -776,7 +776,9 @@ def main():
         )
         #st.markdown("---") # Separator
 
-        if mode == "file":
+        if mode == "auto":
+            st.success("🤖 Current Mode: Auto Identify Stocks")
+        elif mode == "file":
             st.success("📂 Current Mode: File Upload")
         elif mode == "manual":
             st.success("🔍 Current Mode: Manual Input")
