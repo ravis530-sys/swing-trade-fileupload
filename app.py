@@ -768,10 +768,11 @@ def main():
         #st.markdown("---") # Separator
 
         st.subheader("Breakout Analysis")
+        default_breakout_index = 1 if mode == "auto" else 0
         st.session_state["breakout_period"] = st.radio(
             "Select Breakout Period",
             ("None", "52-Day Breakout", "120-Day Breakout"),
-            index=0,
+            index=default_breakout_index,
             key="breakout_radio"
         )
         #st.markdown("---") # Separator
@@ -795,7 +796,7 @@ def main():
             <div class="mode-panel" id="auto_identify_panel">
                 <img src="https://img.icons8.com/ios/100/FFFFFF/search--v1.png" alt="Auto Identify Stocks">
                 <h3>Auto Identify Stocks</h3>
-                <p>Let AI scan NSE & BSE Nifty 50 Stock markets to identify optimal swing trade opportunities</p>
+                <p>Let AI scan NSE & BSE Nifty 50 markets to identify 52 day breakout stock trade opportunities</p>
                 <p class="sub-text">Volume > 500K | Technical Analysis</p>
             </div>
             """,
@@ -809,6 +810,15 @@ def main():
             <script>
             document.getElementById('auto_identify_panel').onclick = function() {
                 document.getElementById('auto_mode_trigger').click();
+                setTimeout(function() {
+                    var element = document.querySelector('.st-emotion-cache-10trblm.e1nzilvr1'); // Target the subheader for "Auto Identify Stocks"
+                    if (element) {
+                        console.log('Scrolling to auto-scan-section');
+                        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    } else {
+                        console.log('Auto-scan section element not found');
+                    }
+                }, 500); // Increased delay to allow Streamlit to render
             };
             </script>
             """,
@@ -836,6 +846,15 @@ def main():
             <script>
             document.getElementById('file_upload_panel').onclick = function() {
                 document.getElementById('file_mode_trigger').click();
+                setTimeout(function() {
+                    var element = document.querySelector('.stFileUploader'); // Target the file uploader directly
+                    if (element) {
+                        console.log('Scrolling to file-upload-section');
+                        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    } else {
+                        console.log('File upload section element not found');
+                    }
+                }, 500); // Increased delay to allow Streamlit to render
             };
             </script>
             """,
@@ -863,6 +882,15 @@ def main():
             <script>
             document.getElementById('manual_input_panel').onclick = function() {
                 document.getElementById('manual_mode_trigger').click();
+                setTimeout(function() {
+                    var element = document.querySelector('.stTextInput'); // Target the text input directly
+                    if (element) {
+                        console.log('Scrolling to manual-input-section');
+                        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    } else {
+                        console.log('Manual input section element not found');
+                    }
+                }, 500); // Increased delay to allow Streamlit to render
             };
             </script>
             """,
@@ -916,7 +944,7 @@ def main():
             else:
                 st.info("No breakout stocks found based on current criteria.")
         else:
-            st.info("No stocks identified by Google AI or no breakout stocks found based on current criteria.")
+            st.info("No stocks identified by Google AI or no 52 breakout stocks found based on current criteria.")
 
     elif mode == "file":
         uploaded_file = st.file_uploader("Upload Stock List (CSV/Excel)", type=["csv", "xlsx"])
