@@ -4,11 +4,11 @@ import matplotlib.pyplot as plt
 import yfinance as yf
 import datetime
 import requests
+import os # Import os to access environment variables
 
 # --- CONFIG ---
 LOG_FILE = "activity.log"
 log_container = None  # will be set inside main()
-
 PAGE_SIZE_DEFAULT = 20
 
 def clear_logs():
@@ -27,6 +27,7 @@ def write_log(message: str):
     if "logs" not in st.session_state:
         st.session_state["logs"] = []
     st.session_state["logs"].append(line)
+
 
     # Limit logs in memory
     if len(st.session_state["logs"]) > 500:
@@ -593,6 +594,9 @@ def main():
             margin-bottom: 30px;
             text-wrap-mode: nowrap;
         }
+        [data-testid="stMainBlockContainer"] {
+            max-width: 930px;
+        }
         .platform-title {
             font-size: 2em !important;
             font-weight: bold;
@@ -661,9 +665,9 @@ def main():
             box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
         }
         .mode-panel img {
-            height: 60px; /* Smaller icons */
-            margin-bottom: 15px;
-            filter: invert(1); /* Make icons white/light in dark mode */
+            height: 40px; /* Smaller icons */
+            margin-bottom: 10px;
+            filter: none /* invert(1); Make icons white/light in dark mode */
         }
         .mode-panel h3 {
             color: #e0e0e0;
@@ -780,9 +784,36 @@ def main():
             st.info("ℹ️ No mode selected yet")
 
     # --- Mode Selection Panels ---
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
 
     with col1:
+        # Auto Identify Stocks Panel (Visual)
+        st.markdown(
+            """
+            <div class="mode-panel" id="auto_identify_panel">
+                <img src="https://img.icons8.com/ios/100/FFFFFF/search--v1.png" alt="Auto Identify Stocks">
+                <h3>Auto Identify Stocks</h3>
+                <p>Let AI scan NSE & BSE Nifty 50 Stock markets to identify optimal swing trade opportunities</p>
+                <p class="sub-text">Volume > 500K | Technical Analysis</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        # Hidden Streamlit button for functionality
+        st.button("Auto Identify Trigger", key="auto_mode_trigger", on_click=lambda: st.session_state.update(mode="auto"))
+        st.markdown("<style>#auto_mode_trigger {display: none;}</style>", unsafe_allow_html=True) # Hide the actual button
+        st.markdown(
+            """
+            <script>
+            document.getElementById('auto_identify_panel').onclick = function() {
+                document.getElementById('auto_mode_trigger').click();
+            };
+            </script>
+            """,
+            unsafe_allow_html=True
+        )
+
+    with col2:
         # File Upload Panel (Visual)
         st.markdown(
             """
@@ -809,7 +840,7 @@ def main():
             unsafe_allow_html=True
         )
 
-    with col2:
+    with col3:
         # Manual Input Panel (Visual)
         st.markdown(
             """
@@ -836,7 +867,56 @@ def main():
             unsafe_allow_html=True
         )
 
-    if mode == "file":
+    if mode == "auto":
+        st.subheader("🤖 Auto Identify Stocks")
+        st.info("Scanning markets for breakout opportunities...")
+
+        # Set default breakout period for auto mode
+        st.session_state["breakout_period"] = st.session_state.get("breakout_period", "52-Day Breakout")
+        
+        #stocks_to_scan = ['HDFCBANK', 'ICICIBANK', 'KOTAKBANK', 'AXISBANK', 'SBIN', 'RELIANCE', 'TCS', 'INFY', 'HINDUNILVR', 'ITC',
+        #                 'LT', 'BAJFINANCE', 'ASIANPAINT']
+        
+        stocks_to_scan = [
+            # Nifty 50
+            'ADANIENT', 'ADANIPORTS', 'APOLLOHOSP', 'ASIANPAINT', 'AXISBANK', 'BAJAJ-AUTO', 'BAJFINANCE',
+            'BAJAJFINSV', 'BPCL', 'BHARTIARTL', 'BRITANNIA', 'CIPLA', 'COALINDIA', 'DIVISLAB', 'DRREDDY',
+            'EICHERMOT', 'GRASIM', 'HCLTECH', 'HDFCBANK', 'HDFCLIFE', 'HEROMOTOCO', 'HINDALCO', 'HINDUNILVR',
+            'ICICIBANK', 'INDUSINDBK', 'INFY', 'ITC', 'JSWSTEEL', 'KOTAKBANK', 'LT', 'M&M', 'MARUTI', 'NESTLEIND',
+            'NTPC', 'ONGC', 'POWERGRID', 'RELIANCE', 'SBILIFE', 'SBIN', 'TATACONSUM', 'TATAMOTORS', 'TATASTEEL',
+            'TCS', 'TECHM', 'TITAN', 'ULTRACEMCO', 'UPL', 'WIPRO',
+            # Nifty Next 50
+            'ACC', 'ALKEM', 'AMBUJACEM', 'AUROPHARMA', 'BAJAJHLDNG', 'BANDHANBNK', 'BERGEPAINT', 'BIOCON',
+            'BOSCHLTD', 'CADILAHC', 'COLPAL', 'DABUR', 'DLF', 'DMART', 'GODREJCP', 'HDFCAMC', 'HDFCLTD',
+            'HINDZINC', 'ICICIGI', 'ICICIPRULI', 'INDIGO', 'INDUSTOWER', 'LICI', 'LUPIN', 'MARICO', 'MOTHERSUMI',
+            'MUTHOOTFIN', 'PEL', 'PIDILITIND', 'PIIND', 'PNB', 'POWERFIN', 'PRESIDIUM', 'RECLTD', 'SBICARD',
+            'SHREECEM', 'SIEMENS', 'SRF', 'SUNTV', 'TATACHEM', 'TATAELXSI', 'TATAPOWER', 'TORNTPOWER',
+            'UBL', 'VEDL', 'VOLTAS', 'ZEEL'
+        ]
+        
+        auto_recommendations = []
+        if stocks_to_scan:
+            for symbol in stocks_to_scan:
+                rec = analyze_symbol(symbol, exchange="NSE")
+                if rec and rec["Recommendation"] == "BUY": # Only show buy signals for auto-identified
+                    auto_recommendations.append(rec)
+        
+        if auto_recommendations:
+            auto_rec_df = pd.DataFrame(auto_recommendations)
+            st.subheader("📋 Auto Identified Breakout Stocks")
+            st.dataframe(auto_rec_df)
+
+            if not auto_rec_df.empty:
+                options = [""] + auto_rec_df["Symbol"].tolist()
+                selected_symbol = st.selectbox("Select a Breakout Stock to Plot", options, key="auto_selected_symbol", index=0)
+                if selected_symbol != "":
+                    plot_symbol(selected_symbol, exchange="NSE", last_n=180)
+            else:
+                st.info("No breakout stocks found based on current criteria.")
+        else:
+            st.info("No stocks identified by Google AI or no breakout stocks found based on current criteria.")
+
+    elif mode == "file":
         uploaded_file = st.file_uploader("Upload Stock List (CSV/Excel)", type=["csv", "xlsx"])
         if uploaded_file:
             if uploaded_file.name.endswith(".csv"):
