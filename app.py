@@ -141,13 +141,21 @@ def compute_indicators(df, symbol=None, close_col="Close"):
     df["MACD"] = ema12 - ema26
     df["Signal"] = df["MACD"].ewm(span=9, adjust=False).mean()
 
+    # Bollinger Bands
+    df["MiddleBand"] = df[close_col].rolling(window=20).mean()
+    df["StdDev"] = df[close_col].rolling(window=20).std()
+    df["UpperBand"] = df["MiddleBand"] + (df["StdDev"] * 2)
+    df["LowerBand"] = df["MiddleBand"] - (df["StdDev"] * 2)
+
     return df
 
 # --- Analyze Symbol (backend only) ---
 def analyze_symbol(symbol, exchange="NSE"):
-    df, source = fetch_hybrid(symbol, exchange, days=180)
-    if df.empty:
-        return None
+    with st.spinner(f"Analyzing {symbol} data..."):
+        with st.spinner(f"Analyzing {symbol} data..."):
+            df, source = fetch_hybrid(symbol, exchange, days=180)
+            if df.empty:
+                return None
 
     #if isinstance(df.columns, pd.MultiIndex):
      #   df.columns = ["_".join([str(c) for c in col if c]) for col in df.columns]
@@ -166,7 +174,8 @@ def analyze_symbol(symbol, exchange="NSE"):
     use_ema200 = st.session_state.get("use_ema200", True)
     use_rsi = st.session_state.get("use_rsi", True)
     use_macd = st.session_state.get("use_macd", True)
-    use_volfilter = st.session_state.get("use_volfilter", True)
+    use_volfilter = st.session_state.get("use_volfilter", False)
+    use_bollinger_bands = st.session_state.get("use_bollinger_bands", False)
     breakout_period = st.session_state.get("breakout_period", "None")
 
     # Indicators
@@ -177,7 +186,7 @@ def analyze_symbol(symbol, exchange="NSE"):
     if use_ema200:
         df['EMA200'] = df[close_col].ewm(span=200).mean()
 
-    if use_rsi or use_macd or use_volfilter:
+    if use_rsi or use_macd or use_volfilter or use_bollinger_bands:
         df = compute_indicators(df, symbol=symbol, close_col=close_col)
 
     # Breakout Analysis
@@ -209,11 +218,7 @@ def analyze_symbol(symbol, exchange="NSE"):
         if use_macd:
             buy_conditions.append(df["MACD"] > df["Signal"])
             sell_conditions.append(df["MACD"] < df["Signal"])
-        if use_volfilter:
-            buy_conditions.append(df["VolFilter"])
-            sell_conditions.append(df["VolFilter"])
-        if df["Breakout"].iloc[-1] and breakout_period != "None":
-            buy_conditions.append(df["Breakout"])
+        
 
     elif trade_type == "Short Trade":
         # Buy conditions for Short Trade (covering short)
@@ -227,8 +232,6 @@ def analyze_symbol(symbol, exchange="NSE"):
             buy_conditions.append(df["RSI"] < 70) # RSI < 70 for covering short
         if use_macd:
             buy_conditions.append(df["MACD"] > df["Signal"]) # MACD line above signal line for covering short
-        if use_volfilter:
-            buy_conditions.append(df["VolFilter"])
 
         # Sell conditions for Short Trade (initiating short)
         if use_ema20:
@@ -241,10 +244,15 @@ def analyze_symbol(symbol, exchange="NSE"):
             sell_conditions.append(df["RSI"] > 30) # RSI near 30 for initiating short
         if use_macd:
             sell_conditions.append(df["MACD"] < df["Signal"]) # MACD line below signal line for initiating short
-        if use_volfilter:
-            sell_conditions.append(df["VolFilter"])
-        if df["Breakout"].iloc[-1] and breakout_period != "None":
-            sell_conditions.append(df["Breakout"]) # Breakout could be a short signal too
+
+    if use_volfilter:
+        buy_conditions.append(df["VolFilter"])
+        sell_conditions.append(df["VolFilter"])
+    if use_bollinger_bands:
+        buy_conditions.append(df[close_col] < df["LowerBand"]) # Price touches or nears lower band
+        sell_conditions.append(df[close_col] > df["UpperBand"]) # Price touches or nears upper band
+    if df["Breakout"].iloc[-1] and breakout_period != "None":
+        buy_conditions.append(df["Breakout"])
 
     # Combine conditions
     if buy_conditions:
@@ -303,10 +311,11 @@ def analyze_symbol(symbol, exchange="NSE"):
 
 # --- Plot Symbol (charts & stats) ---
 def plot_symbol(symbol, exchange="NSE", last_n=180):
-    df, source = fetch_hybrid(symbol, exchange, days=last_n)
-    if df.empty:
-        st.warning(f"No price data for {symbol} ({exchange})")
-        return
+    with st.spinner(f"Plotting {symbol} data..."):
+        df, source = fetch_hybrid(symbol, exchange, days=last_n)
+        if df.empty:
+            st.warning(f"No price data for {symbol} ({exchange})")
+            return
 
     #if isinstance(df.columns, pd.MultiIndex):
      #   df.columns = ["_".join([str(c) for c in col if c]) for col in df.columns]
@@ -337,7 +346,7 @@ def plot_symbol(symbol, exchange="NSE", last_n=180):
     if use_ema200:
         df['EMA200'] = df[close_col].ewm(span=200).mean()
 
-    if use_rsi or use_macd or use_volfilter:
+    if use_rsi or use_macd or use_volfilter or st.session_state.get("use_bollinger_bands", False):
         df = compute_indicators(df, symbol=symbol, close_col=close_col)
 
     # Breakout Analysis
@@ -369,11 +378,7 @@ def plot_symbol(symbol, exchange="NSE", last_n=180):
         if use_macd:
             buy_conditions.append(df["MACD"] > df["Signal"])
             sell_conditions.append(df["MACD"] < df["Signal"])
-        if use_volfilter:
-            buy_conditions.append(df["VolFilter"])
-            sell_conditions.append(df["VolFilter"])
-        if df["Breakout"].iloc[-1] and breakout_period != "None":
-            buy_conditions.append(df["Breakout"])
+        
 
     elif trade_type == "Short Trade":
         # Buy conditions for Short Trade (covering short)
@@ -387,8 +392,6 @@ def plot_symbol(symbol, exchange="NSE", last_n=180):
             buy_conditions.append(df["RSI"] < 70) # RSI < 70 for covering short
         if use_macd:
             buy_conditions.append(df["MACD"] > df["Signal"]) # MACD line above signal line for covering short
-        if use_volfilter:
-            buy_conditions.append(df["VolFilter"])
 
         # Sell conditions for Short Trade (initiating short)
         if use_ema20:
@@ -401,10 +404,12 @@ def plot_symbol(symbol, exchange="NSE", last_n=180):
             sell_conditions.append(df["RSI"] > 30) # RSI near 30 for initiating short
         if use_macd:
             sell_conditions.append(df["MACD"] < df["Signal"]) # MACD line below signal line for initiating short
-        if use_volfilter:
-            sell_conditions.append(df["VolFilter"])
-        if df["Breakout"].iloc[-1] and breakout_period != "None":
-            sell_conditions.append(df["Breakout"]) # Breakout could be a short signal too
+
+    if use_volfilter:
+        buy_conditions.append(df["VolFilter"])
+        sell_conditions.append(df["VolFilter"])
+    if df["Breakout"].iloc[-1] and breakout_period != "None":
+        buy_conditions.append(df["Breakout"])
 
     # Combine conditions
     if buy_conditions:
@@ -427,6 +432,10 @@ def plot_symbol(symbol, exchange="NSE", last_n=180):
     if use_ema200:
         ax.plot(df.index, df['EMA200'], "--", label="EMA200")
     
+    if st.session_state.get("use_bollinger_bands", False):
+        ax.plot(df.index, df['UpperBand'], ":", label="Upper Bollinger Band", color="gray")
+        ax.plot(df.index, df['LowerBand'], ":", label="Lower Bollinger Band", color="gray")
+
     if breakout_period == "52-Day Breakout" and 'High_52_Week' in df.columns:
         ax.plot(df.index, df['High_52_Week'], ":", label="52-Week High", color="orange")
     elif breakout_period == "120-Day Breakout" and 'High_120_Day' in df.columns:
@@ -832,6 +841,7 @@ def main():
         st.session_state["use_rsi"] = st.checkbox("RSI", value=True, key="rsi_checkbox")
         st.session_state["use_macd"] = st.checkbox("MACD", value=True, key="macd_checkbox")
         st.session_state["use_volfilter"] = st.checkbox("Volume Filter", value=False, key="volfilter_checkbox")
+        st.session_state["use_bollinger_bands"] = st.checkbox("Bollinger Bands", value=False, key="bollinger_checkbox")
 
         #st.markdown("---") # Separator
 
@@ -974,7 +984,7 @@ def main():
         
         #stocks_to_scan = ['HDFCBANK', 'ICICIBANK', 'KOTAKBANK', 'AXISBANK', 'SBIN', 'RELIANCE', 'TCS', 'INFY', 'HINDUNILVR', 'ITC',
         #                 'LT', 'BAJFINANCE', 'ASIANPAINT']
-        
+
         stocks_to_scan = [
             # Nifty 50
             'ADANIENT', 'ADANIPORTS', 'APOLLOHOSP', 'ASIANPAINT', 'AXISBANK', 'BAJAJ-AUTO', 'BAJFINANCE',
@@ -994,10 +1004,15 @@ def main():
         
         auto_recommendations = []
         if stocks_to_scan:
-            for symbol in stocks_to_scan:
+            progress_text = "Operation in progress. Please wait."
+            my_bar = st.progress(0, text=progress_text)
+            for i, symbol in enumerate(stocks_to_scan):
                 rec = analyze_symbol(symbol, exchange="NSE")
                 if rec and rec["Recommendation"] == "BUY": # Only show buy signals for auto-identified
                     auto_recommendations.append(rec)
+                progress_percentage = (i + 1) / len(stocks_to_scan)
+                my_bar.progress(progress_percentage, text=f"Scanning {symbol} ({i+1}/{len(stocks_to_scan)})")
+            my_bar.empty() # Clear the progress bar after completion
         
         if auto_recommendations:
             auto_rec_df = pd.DataFrame(auto_recommendations)
@@ -1077,10 +1092,15 @@ def main():
 
             # Scan all symbols
             recommendations = []
-            for symbol in symbols:
+            progress_text = "Operation in progress. Please wait."
+            my_bar = st.progress(0, text=progress_text)
+            for i, symbol in enumerate(symbols):
                 rec = analyze_symbol(symbol, exchange="NSE")
                 if rec:
                     recommendations.append(rec)
+                progress_percentage = (i + 1) / len(symbols)
+                my_bar.progress(progress_percentage, text=f"Analyzing {symbol} ({i+1}/{len(symbols)})")
+            my_bar.empty() # Clear the progress bar after completion
 
             if recommendations:
                 rec_df = pd.DataFrame(recommendations)
