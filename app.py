@@ -189,28 +189,62 @@ def analyze_symbol(symbol, exchange="NSE"):
         df['High_120_Day'] = df[close_col].rolling(window=120, min_periods=1).max()
         df["Breakout"] = (df[close_col].iloc[-1] >= df['High_120_Day'].iloc[-1])
 
+    # Get trade type from session state, default to "Long Trade"
+    trade_type = st.session_state.get("file_trade_type", "Long Trade")
+
     # Signals with volume filter
     buy_conditions = []
     sell_conditions = []
 
-    if use_ema20 and use_ema200:
-        buy_conditions.append(df["EMA20"] > df["EMA200"])
-        sell_conditions.append(df["EMA20"] < df["EMA200"])
-    if use_ema50 and use_ema200:
-        buy_conditions.append(df["EMA50"] > df["EMA200"])
-        sell_conditions.append(df["EMA50"] < df["EMA200"])
-    if use_rsi:
-        buy_conditions.append(df["RSI"] < 30)
-        sell_conditions.append(df["RSI"] > 70)
-    if use_macd:
-        buy_conditions.append(df["MACD"] > df["Signal"])
-        sell_conditions.append(df["MACD"] < df["Signal"])
-    if use_volfilter:
-        buy_conditions.append(df["VolFilter"])
-        sell_conditions.append(df["VolFilter"])
-    
-    if df["Breakout"].iloc[-1] and breakout_period != "None":
-        buy_conditions.append(df["Breakout"])
+    if trade_type == "Long Trade":
+        if use_ema20 and use_ema200:
+            buy_conditions.append(df["EMA20"] > df["EMA200"])
+            sell_conditions.append(df["EMA20"] < df["EMA200"])
+        if use_ema50 and use_ema200:
+            buy_conditions.append(df["EMA50"] > df["EMA200"])
+            sell_conditions.append(df["EMA50"] < df["EMA200"])
+        if use_rsi:
+            buy_conditions.append(df["RSI"] < 30)
+            sell_conditions.append(df["RSI"] > 70)
+        if use_macd:
+            buy_conditions.append(df["MACD"] > df["Signal"])
+            sell_conditions.append(df["MACD"] < df["Signal"])
+        if use_volfilter:
+            buy_conditions.append(df["VolFilter"])
+            sell_conditions.append(df["VolFilter"])
+        if df["Breakout"].iloc[-1] and breakout_period != "None":
+            buy_conditions.append(df["Breakout"])
+
+    elif trade_type == "Short Trade":
+        # Buy conditions for Short Trade (covering short)
+        if use_ema20:
+            buy_conditions.append(df[close_col] < df["EMA20"])
+        if use_ema50:
+            buy_conditions.append(df[close_col] < df["EMA50"])
+        if use_ema200:
+            buy_conditions.append(df[close_col] < df["EMA200"])
+        if use_rsi:
+            buy_conditions.append(df["RSI"] < 70) # RSI < 70 for covering short
+        if use_macd:
+            buy_conditions.append(df["MACD"] > df["Signal"]) # MACD line above signal line for covering short
+        if use_volfilter:
+            buy_conditions.append(df["VolFilter"])
+
+        # Sell conditions for Short Trade (initiating short)
+        if use_ema20:
+            sell_conditions.append(df[close_col] > df["EMA20"])
+        if use_ema50:
+            sell_conditions.append(df[close_col] > df["EMA50"])
+        if use_ema200:
+            sell_conditions.append(df[close_col] > df["EMA200"])
+        if use_rsi:
+            sell_conditions.append(df["RSI"] > 30) # RSI near 30 for initiating short
+        if use_macd:
+            sell_conditions.append(df["MACD"] < df["Signal"]) # MACD line below signal line for initiating short
+        if use_volfilter:
+            sell_conditions.append(df["VolFilter"])
+        if df["Breakout"].iloc[-1] and breakout_period != "None":
+            sell_conditions.append(df["Breakout"]) # Breakout could be a short signal too
 
     # Combine conditions
     if buy_conditions:
@@ -315,28 +349,62 @@ def plot_symbol(symbol, exchange="NSE", last_n=180):
         df['High_120_Day'] = df[close_col].rolling(window=120, min_periods=1).max()
         df["Breakout"] = (df[close_col].iloc[-1] >= df['High_120_Day'].iloc[-1])
 
+    # Get trade type from session state, default to "Long Trade"
+    trade_type = st.session_state.get("file_trade_type", "Long Trade")
+
     # Signals
     buy_conditions = []
     sell_conditions = []
 
-    if use_ema20 and use_ema200:
-        buy_conditions.append(df["EMA20"] > df["EMA200"])
-        sell_conditions.append(df["EMA20"] < df["EMA200"])
-    if use_ema50 and use_ema200:
-        buy_conditions.append(df["EMA50"] > df["EMA200"])
-        sell_conditions.append(df["EMA50"] < df["EMA200"])
-    if use_rsi:
-        buy_conditions.append(df["RSI"] < 30)
-        sell_conditions.append(df["RSI"] > 70)
-    if use_macd:
-        buy_conditions.append(df["MACD"] > df["Signal"])
-        sell_conditions.append(df["MACD"] < df["Signal"])
-    if use_volfilter:
-        buy_conditions.append(df["VolFilter"])
-        sell_conditions.append(df["VolFilter"])
-    
-    if df["Breakout"].iloc[-1] and breakout_period != "None":
-        buy_conditions.append(df["Breakout"])
+    if trade_type == "Long Trade":
+        if use_ema20 and use_ema200:
+            buy_conditions.append(df["EMA20"] > df["EMA200"])
+            sell_conditions.append(df["EMA20"] < df["EMA200"])
+        if use_ema50 and use_ema200:
+            buy_conditions.append(df["EMA50"] > df["EMA200"])
+            sell_conditions.append(df["EMA50"] < df["EMA200"])
+        if use_rsi:
+            buy_conditions.append(df["RSI"] < 30)
+            sell_conditions.append(df["RSI"] > 70)
+        if use_macd:
+            buy_conditions.append(df["MACD"] > df["Signal"])
+            sell_conditions.append(df["MACD"] < df["Signal"])
+        if use_volfilter:
+            buy_conditions.append(df["VolFilter"])
+            sell_conditions.append(df["VolFilter"])
+        if df["Breakout"].iloc[-1] and breakout_period != "None":
+            buy_conditions.append(df["Breakout"])
+
+    elif trade_type == "Short Trade":
+        # Buy conditions for Short Trade (covering short)
+        if use_ema20:
+            buy_conditions.append(df[close_col] < df["EMA20"])
+        if use_ema50:
+            buy_conditions.append(df[close_col] < df["EMA50"])
+        if use_ema200:
+            buy_conditions.append(df[close_col] < df["EMA200"])
+        if use_rsi:
+            buy_conditions.append(df["RSI"] < 70) # RSI < 70 for covering short
+        if use_macd:
+            buy_conditions.append(df["MACD"] > df["Signal"]) # MACD line above signal line for covering short
+        if use_volfilter:
+            buy_conditions.append(df["VolFilter"])
+
+        # Sell conditions for Short Trade (initiating short)
+        if use_ema20:
+            sell_conditions.append(df[close_col] > df["EMA20"])
+        if use_ema50:
+            sell_conditions.append(df[close_col] > df["EMA50"])
+        if use_ema200:
+            sell_conditions.append(df[close_col] > df["EMA200"])
+        if use_rsi:
+            sell_conditions.append(df["RSI"] > 30) # RSI near 30 for initiating short
+        if use_macd:
+            sell_conditions.append(df["MACD"] < df["Signal"]) # MACD line below signal line for initiating short
+        if use_volfilter:
+            sell_conditions.append(df["VolFilter"])
+        if df["Breakout"].iloc[-1] and breakout_period != "None":
+            sell_conditions.append(df["Breakout"]) # Breakout could be a short signal too
 
     # Combine conditions
     if buy_conditions:
@@ -758,12 +826,12 @@ def main():
     # --- Sidebar Status ---
     with st.sidebar:
         st.subheader("Technical Indicators")
-        st.session_state["use_ema20"] = st.checkbox("EMA20", value=True, key="ema20_checkbox")
+        st.session_state["use_ema20"] = st.checkbox("EMA20", value=False, key="ema20_checkbox")
         st.session_state["use_ema50"] = st.checkbox("EMA50", value=True, key="ema50_checkbox")
         st.session_state["use_ema200"] = st.checkbox("EMA200", value=True, key="ema200_checkbox")
         st.session_state["use_rsi"] = st.checkbox("RSI", value=True, key="rsi_checkbox")
         st.session_state["use_macd"] = st.checkbox("MACD", value=True, key="macd_checkbox")
-        st.session_state["use_volfilter"] = st.checkbox("Volume Filter", value=True, key="volfilter_checkbox")
+        st.session_state["use_volfilter"] = st.checkbox("Volume Filter", value=False, key="volfilter_checkbox")
 
         #st.markdown("---") # Separator
 
@@ -985,12 +1053,26 @@ def main():
                 column_choice = "Symbol"
                 symbols = df_uploaded[column_choice].dropna().unique().tolist()
 
-            # Analysis Mode
-            analysis_options = [""] + ["Auto (Signals)", "BUY", "SELL", "HOLD"]
-            analysis_mode = st.sidebar.selectbox("Select Analysis Mode", analysis_options, index=0)
+
+            # Analysis Mode and Trade Type Selection
+            st.subheader("Select Analysis Mode")
+            col_analysis, col_trade_type = st.columns([0.7, 0.3])
+
+            with col_analysis:
+                analysis_options = [""] + ["Auto (Signals)", "BUY", "SELL", "HOLD"]
+                analysis_mode = st.selectbox("Filter Recommendations by:", analysis_options, index=0, key="file_analysis_mode")
+
+            with col_trade_type:
+                trade_type = st.radio(
+                    "Trade Type",
+                    ("Long Trade", "Short Trade"),
+                    index=0, # Default to Long Trade
+                    key="file_trade_type",
+                    horizontal=True
+                )
 
             if analysis_mode == "":
-                st.sidebar.warning("⚠️ Please select an analysis mode to run scans.")
+                st.warning("⚠️ Please select an analysis mode to run scans.")
                 return
 
             # Scan all symbols
@@ -1009,6 +1091,12 @@ def main():
                     rec_df = rec_df[rec_df["Recommendation"] == "SELL"]
                 elif analysis_mode == "HOLD":
                     rec_df = rec_df[rec_df["Recommendation"] == "HOLD"]
+
+                # Apply trade type filter
+                if trade_type == "Long Trade":
+                    rec_df = rec_df[rec_df["Recommendation"] == "BUY"]
+                elif trade_type == "Short Trade":
+                    rec_df = rec_df[rec_df["Recommendation"] == "SELL"]
 
                 st.subheader("📋 Recommendations Table")
                 st.dataframe(rec_df)
