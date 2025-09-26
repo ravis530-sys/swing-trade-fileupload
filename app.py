@@ -660,6 +660,9 @@ def main():
         [data-testid="stMainBlockContainer"] {
             max-width: 57%;
         }*/
+        [data-testid="stHeader"] {
+            display: none;
+        }
         /* Header and Connection Status */
         .header-container {
             display: flex;
@@ -800,6 +803,9 @@ def main():
             }
             [data-testid="stButton"] {
                 width: 295px; /* Make sidebar buttons responsive */
+            }
+            [data-testid="stHeader"] {
+                display: none;
             }
         }
         </style>
